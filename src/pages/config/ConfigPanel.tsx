@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { useSimulation } from '../../contexts/SimulationContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
-import { Settings, Save, AlertCircle, Lock, Moon, Sun, RefreshCw, Activity } from 'lucide-react';
+import { useServer } from '../../contexts/ServerContext';
+import { Settings, Save, AlertCircle, Lock, Moon, Sun, RefreshCw, Activity, Brain, TrendingUp } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 const ConfigPanel = () => {
   const { hasPermission } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { trainModel, modelMetrics } = useServer();
   const { 
     algoritmoActual, 
     modoAutomatico, 
@@ -26,8 +28,26 @@ const ConfigPanel = () => {
   const [apiEndpoint, setApiEndpoint] = useState<string>("https://api.balanceo-ia.edu/v1");
   const [isAdvancedOpen, setIsAdvancedOpen] = useState<boolean>(false);
   
+  // Estado para el entrenamiento del modelo
+  const [selectedAlgorithm, setSelectedAlgorithm] = useState<'random_forest' | 'gradient_boosting'>('random_forest');
+  const [isTraining, setIsTraining] = useState<boolean>(false);
+  
   // Verificar si el usuario tiene permisos de configuración
   const canManageConfig = hasPermission('config');
+  
+  // Entrenar modelo de IA
+  const handleTrainModel = async () => {
+    setIsTraining(true);
+    try {
+      await trainModel(selectedAlgorithm);
+      // Las notificaciones las maneja ServerContext
+    } catch (error) {
+      console.error('Error training model:', error);
+      // Las notificaciones de error las maneja ServerContext
+    } finally {
+      setIsTraining(false);
+    }
+  };
   
   // Guardar configuración
   const saveConfig = () => {
@@ -72,6 +92,131 @@ const ConfigPanel = () => {
         </div>
       ) : (
         <>
+          {/* Sección de entrenamiento del modelo de IA */}
+          <div className="card">
+            <div className="flex items-center mb-6">
+              <Brain className="h-6 w-6 text-primary-500 mr-3" />
+              <h2 className="text-lg font-semibold text-gray-800 dark:text-white">
+                Entrenamiento del Modelo de IA
+              </h2>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="label">Seleccionar Algoritmo de Machine Learning</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <button 
+                    className={`py-4 px-4 rounded-lg border-2 transition-all ${
+                      selectedAlgorithm === 'random_forest' 
+                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' 
+                        : 'border-gray-200 dark:border-dark-700 hover:border-gray-300 dark:hover:border-dark-600'
+                    }`}
+                    onClick={() => setSelectedAlgorithm('random_forest')}
+                  >
+                    <div className="text-left">
+                      <div className="flex items-center mb-2">
+                        <TrendingUp className="h-5 w-5 text-primary-500 mr-2" />
+                        <span className="block font-medium text-gray-800 dark:text-white">Random Forest</span>
+                      </div>
+                      <span className="text-xs text-gray-600 dark:text-gray-400">
+                        Algoritmo de ensamble robusto, ideal para datos con múltiples características
+                      </span>
+                    </div>
+                  </button>
+                  
+                  <button 
+                    className={`py-4 px-4 rounded-lg border-2 transition-all ${
+                      selectedAlgorithm === 'gradient_boosting' 
+                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' 
+                        : 'border-gray-200 dark:border-dark-700 hover:border-gray-300 dark:hover:border-dark-600'
+                    }`}
+                    onClick={() => setSelectedAlgorithm('gradient_boosting')}
+                  >
+                    <div className="text-left">
+                      <div className="flex items-center mb-2">
+                        <TrendingUp className="h-5 w-5 text-primary-500 mr-2" />
+                        <span className="block font-medium text-gray-800 dark:text-white">Gradient Boosting</span>
+                      </div>
+                      <span className="text-xs text-gray-600 dark:text-gray-400">
+                        Optimización secuencial, mayor precisión en predicciones complejas
+                      </span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Métricas del modelo actual */}
+              {modelMetrics && (
+                <div className="p-4 bg-gray-50 dark:bg-dark-700 rounded-lg">
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                    Métricas del Último Entrenamiento
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Precisión</p>
+                      <p className="text-lg font-bold text-primary-500">
+                        {(modelMetrics.accuracy * 100).toFixed(1)}%
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">R² Score</p>
+                      <p className="text-lg font-bold text-primary-500">
+                        {modelMetrics.r2_score?.toFixed(3) || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">MSE</p>
+                      <p className="text-lg font-bold text-primary-500">
+                        {modelMetrics.mse?.toFixed(2) || 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Registros</p>
+                      <p className="text-lg font-bold text-primary-500">
+                        {modelMetrics.training_records || 0}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-gray-200 dark:border-dark-600">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Algoritmo</p>
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {modelMetrics.model_type === 'random_forest' ? 'Random Forest' : 'Gradient Boosting'}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <button 
+                onClick={handleTrainModel}
+                disabled={isTraining}
+                className={`btn btn-primary w-full md:w-auto ${isTraining ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {isTraining ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Entrenando Modelo...
+                  </>
+                ) : (
+                  <>
+                    <Brain className="h-4 w-4 mr-2" />
+                    Entrenar Modelo
+                  </>
+                )}
+              </button>
+
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md flex items-start">
+                <AlertCircle className="h-5 w-5 text-blue-500 mr-2 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-blue-700 dark:text-blue-300">
+                  <p className="font-medium mb-1">Sobre el entrenamiento del modelo</p>
+                  <p>
+                    El sistema entrenará el modelo de IA utilizando los datos de tráfico históricos almacenados.
+                    A mayor cantidad de datos, mejor será la precisión del modelo para predecir el servidor óptimo.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Sección de algoritmo de balanceo */}
           <div className="card">
             <div className="flex items-center mb-6">

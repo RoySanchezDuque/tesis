@@ -14,6 +14,7 @@ import NetworkTopology from './pages/topology/NetworkTopology';
 import TrafficSimulator from './pages/simulator/TrafficSimulator';
 import LogsEvents from './pages/logs/LogsEvents';
 import UserManagement from './pages/users/UserManagement';
+import ServerManagement from './pages/users/ServerManagement';
 import ConfigPanel from './pages/config/ConfigPanel';
 import Reports from './pages/reports/Reports';
 import NotFound from './pages/NotFound';
@@ -63,7 +64,7 @@ function App() {
         <Route path="topologia" element={<NetworkTopology />} />
         <Route path="simulador" element={<TrafficSimulator />} />
         <Route path="logs" element={<LogsEvents />} />
-        <Route path="usuarios" element={<UserManagement />} />
+        <Route path="usuarios" element={<ServerManagement />} />
         <Route path="configuracion" element={<ConfigPanel />} />
         <Route path="informes" element={<Reports />} />
       </Route>

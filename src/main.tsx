@@ -6,6 +6,7 @@ import './index.css';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { SimulationProvider } from './contexts/SimulationContext';
+import { ServerProvider } from './contexts/ServerContext';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
@@ -14,10 +15,12 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
-          <SimulationProvider>
-            <App />
-            <ToastContainer position="bottom-right" theme="colored" />
-          </SimulationProvider>
+          <ServerProvider>
+            <SimulationProvider>
+              <App />
+              <ToastContainer position="bottom-right" theme="colored" />
+            </SimulationProvider>
+          </ServerProvider>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

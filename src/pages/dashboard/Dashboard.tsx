@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useSimulation } from '../../contexts/SimulationContext';
+import { useServer } from '../../contexts/ServerContext';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  BarChart, Bar, Legend 
+  BarChart, Bar
 } from 'recharts';
 import { Network, Zap, BarChart as BarChartIcon, Server, CheckCircle2, FileText } from 'lucide-react';
 import StatCard from '../../components/StatCard';
@@ -10,42 +10,72 @@ import LogsPanel from '../../components/LogsPanel';
 import { obtenerFechaFormateada } from '../../utils/dateUtils';
 
 const Dashboard = () => {
-  const { 
-    trafico, 
-    latenciaPromedio, 
-    cargaBalanceada, 
-    nodos, 
-    metricas, 
-    eventos 
-  } = useSimulation();
+  const { servers, logs, fetchServers, fetchLogs, loading } = useServer();
   
   const [traficoData, setTraficoData] = useState<any[]>([]);
   const [cargaNodos, setCargaNodos] = useState<any[]>([]);
   
-  // Preparar datos para gráficas
   useEffect(() => {
-    // Datos para gráfica de tráfico
-    const datosTráfico = trafico.map((valor, index) => ({
-      minuto: index,
-      valor
-    }));
-    setTraficoData(datosTráfico);
-    
-    // Datos para gráfica de carga de nodos
-    const datosNodos = nodos
-      .filter(nodo => nodo.tipo === 'servidor' || nodo.tipo === 'balanceador')
-      .map(nodo => ({
-        nombre: nodo.nombre,
-        carga: nodo.carga,
-        estado: nodo.estado
-      }));
-    setCargaNodos(datosNodos);
-  }, [trafico, nodos]);
+    fetchServers();
+    const interval = setInterval(fetchServers, 1000); // Actualizar cada segundo para gráfica más fluida
+    return () => clearInterval(interval);
+  }, [fetchServers]);
 
-  // Calcular estadísticas
-  const nodosDisponibles = nodos.filter(nodo => nodo.estado !== 'crítico').length;
-  const nodosTotal = nodos.length;
-  const disponibilidad = (nodosDisponibles / nodosTotal) * 100;
+  useEffect(() => {
+    fetchLogs(100, 0);
+  }, [fetchLogs]);
+  
+  useEffect(() => {
+    if (servers.length > 0) {
+      const timestamp = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const avgLoad = servers.reduce((acc, s) => acc + s.load_percentage, 0) / servers.length;
+      
+      setTraficoData(prev => {
+        const next = [...prev, { time: timestamp, carga: avgLoad }];
+        return next.slice(-20);
+      });
+    }
+
+    const datosNodos = servers.map(servidor => ({
+      nombre: servidor.name,
+      carga: servidor.load_percentage,
+      estado: servidor.status === 'active' ? 'normal' : servidor.status
+    }));
+    setCargaNodos(datosNodos);
+  }, [servers]);
+
+  const nodosDisponibles = servers.filter(s => s.status === 'active').length;
+  const nodosTotal = servers.length;
+  const disponibilidad = nodosTotal > 0 ? (nodosDisponibles / nodosTotal) * 100 : 0;
+  
+  const avgLoad = servers.length > 0
+    ? servers.reduce((acc, s) => acc + s.load_percentage, 0) / servers.length
+    : 0;
+  
+  const balanceStd = servers.length > 0
+    ? Math.sqrt(
+        servers.reduce((acc, s) => acc + Math.pow(s.load_percentage - avgLoad, 2), 0) / servers.length
+      )
+    : 0;
+  const eficienciaBalanceo = Math.max(0, Math.min(100, 100 - balanceStd));
+  
+  const latenciaPromedio = servers.length > 0 
+    ? servers.reduce((acc, s) => {
+        const baseLatency = 10;
+        const loadFactor = s.load_percentage / 100;
+        const latency = baseLatency + (loadFactor * 50);
+        return acc + latency;
+      }, 0) / servers.length
+    : 0;
+  
+  const eventosRecientesNormalizados = logs.slice(0, 5).map((log: any, idx: number) => ({
+    id: log.id ?? idx,
+    timestamp: log.created_at ? obtenerFechaFormateada(log.created_at) : new Date().toISOString(),
+    tipo: 'log',
+    mensaje: log.action || log.details || 'Evento del servidor',
+    nodoId: log.server_id || null,
+    severidad: 'info' as const,
+  }));
   
   return (
     <div className="space-y-6 pb-8">
@@ -58,7 +88,6 @@ const Dashboard = () => {
         </p>
       </header>
 
-      {/* Tarjetas de estadísticas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
           title="Latencia Promedio" 
@@ -70,8 +99,8 @@ const Dashboard = () => {
         />
         
         <StatCard 
-          title="Tráfico Actual" 
-          value={`${trafico[trafico.length - 1]?.toFixed(1) || 0} Mbps`} 
+          title="Carga Promedio" 
+          value={`${avgLoad.toFixed(1)}%`} 
           icon={<BarChartIcon className="h-8 w-8 text-warning-500" />}
           change={{ value: 5.2, label: 'desde ayer' }}
           trend="up"
@@ -80,7 +109,7 @@ const Dashboard = () => {
         
         <StatCard 
           title="Eficiencia de Balanceo" 
-          value={`${cargaBalanceada.toFixed(1)}%`} 
+          value={`${eficienciaBalanceo.toFixed(1)}%`} 
           icon={<Network className="h-8 w-8 text-success-500" />}
           change={{ value: 1.8, label: 'desde ayer' }}
           trend="up"
@@ -97,9 +126,7 @@ const Dashboard = () => {
         />
       </div>
 
-      {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        {/* Gráfica de tráfico en tiempo real */}
         <div className="card h-80">
           <div className="mb-4 flex justify-between items-center">
             <h2 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center">
@@ -117,32 +144,33 @@ const Dashboard = () => {
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" opacity={0.2} />
                 <XAxis 
-                  dataKey="minuto" 
-                  label={{ value: 'Tiempo (min)', position: 'insideBottomRight', offset: -10 }}
+                  dataKey="time" 
+                  label={{ value: 'Tiempo', position: 'insideBottomRight', offset: -10 }}
                   stroke="#6B7280"
+                  tick={{ fontSize: 9 }}
                 />
                 <YAxis 
-                  label={{ value: 'Mbps', angle: -90, position: 'insideLeft' }}
+                  label={{ value: 'Carga (%)', angle: -90, position: 'insideLeft' }}
                   stroke="#6B7280"
+                  domain={[0, 100]}
                 />
                 <Tooltip 
-                  formatter={(value: number) => [`${value.toFixed(1)} Mbps`, 'Tráfico']}
-                  labelFormatter={(value) => `Hace ${20 - value} min`}
+                  formatter={(value: number) => [`${value.toFixed(1)}%`, 'Carga']}
                 />
                 <Line 
                   type="monotone" 
-                  dataKey="valor" 
+                  dataKey="carga" 
                   stroke="#0F52BA" 
                   dot={false}
                   strokeWidth={2}
                   activeDot={{ r: 5 }}
+                  name="Carga del Sistema"
                 />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Gráfica de carga por nodo */}
         <div className="card h-80">
           <div className="mb-4 flex justify-between items-center">
             <h2 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center">
@@ -179,14 +207,6 @@ const Dashboard = () => {
                   dataKey="carga" 
                   name="Carga" 
                   fill="#0F52BA" 
-                  radius={[4, 4, 0, 0]}
-                  // Color según el estado
-                  fill={(data) => data.estado === 'crítico' 
-                    ? '#C0392B' 
-                    : data.estado === 'advertencia' 
-                      ? '#F5B041' 
-                      : '#2E8B57'
-                  }
                 />
               </BarChart>
             </ResponsiveContainer>
@@ -194,79 +214,85 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Logs recientes y resumen de eventos */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <div className="card">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center">
-                <FileText className="h-5 w-5 mr-2 text-primary-500" />
-                Eventos Recientes
-              </h2>
-              <a href="/logs" className="text-sm text-primary-600 dark:text-primary-400 hover:underline">
-                Ver todos
-              </a>
-            </div>
-            <LogsPanel logs={eventos.slice(0, 5)} />
+            <h2 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center mb-4">
+              <FileText className="h-5 w-5 mr-2 text-primary-500" />
+              Eventos Recientes
+            </h2>
+            <LogsPanel logs={eventosRecientesNormalizados} />
           </div>
         </div>
-        
-        <div className="card">
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center mb-4">
-            <CheckCircle2 className="h-5 w-5 mr-2 text-success-500" />
-            Estado del Sistema
-          </h2>
-          
-          <div className="space-y-4">
-            <div className="bg-gray-50 dark:bg-dark-700 p-4 rounded-lg">
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-600 dark:text-gray-300">Algoritmo Activo</span>
-                <span className="font-medium capitalize text-primary-600 dark:text-primary-400">
-                  Balanceo IA
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 dark:bg-dark-600 rounded-full h-1">
-                <div className="bg-primary-500 h-1 rounded-full w-full"></div>
-              </div>
-            </div>
+
+        <div className="space-y-4">
+          <div className="card">
+            <h3 className="font-semibold text-gray-800 dark:text-white mb-4">Estado General</h3>
             
-            <div className="bg-gray-50 dark:bg-dark-700 p-4 rounded-lg">
+            <div className="bg-gray-50 dark:bg-dark-700 p-4 rounded-lg mb-4">
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-600 dark:text-gray-300">Servidores Disponibles</span>
+                <span className="text-gray-600 dark:text-gray-300">Disponibilidad</span>
                 <span className="font-medium text-success-600 dark:text-success-400">
-                  {nodosDisponibles}/{nodosTotal}
+                  {disponibilidad.toFixed(0)}%
                 </span>
               </div>
-              <div className="w-full bg-gray-200 dark:bg-dark-600 rounded-full h-1">
+              <div className="w-full bg-gray-200 dark:bg-dark-600 rounded-full h-2">
                 <div 
-                  className="bg-success-500 h-1 rounded-full" 
-                  style={{ width: `${(nodosDisponibles / nodosTotal) * 100}%` }}
+                  className="bg-success-500 h-2 rounded-full" 
+                  style={{ width: `${disponibilidad}%` }}
                 ></div>
               </div>
             </div>
-            
-            <div className="bg-gray-50 dark:bg-dark-700 p-4 rounded-lg">
+
+            <div className="bg-gray-50 dark:bg-dark-700 p-4 rounded-lg mb-4">
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-gray-600 dark:text-gray-300">Uso de Recursos</span>
                 <span className="font-medium text-warning-600 dark:text-warning-400">
-                  {Math.round(trafico[trafico.length - 1] || 0)}%
+                  {avgLoad.toFixed(0)}%
                 </span>
               </div>
-              <div className="w-full bg-gray-200 dark:bg-dark-600 rounded-full h-1">
+              <div className="w-full bg-gray-200 dark:bg-dark-600 rounded-full h-2">
                 <div 
-                  className="bg-warning-500 h-1 rounded-full" 
-                  style={{ width: `${trafico[trafico.length - 1] || 0}%` }}
+                  className="bg-warning-500 h-2 rounded-full" 
+                  style={{ width: `${avgLoad}%` }}
                 ></div>
               </div>
             </div>
-            
-            <div className="mt-4">
-              <h3 className="font-medium text-gray-700 dark:text-gray-200 mb-2">Próximas Acciones:</h3>
-              <ul className="list-disc pl-5 text-sm text-gray-600 dark:text-gray-300 space-y-1">
-                <li>Mantenimiento programado: 23/05/2025</li>
-                <li>Actualización de algoritmo IA: 15/06/2025</li>
-                <li>Auditoría de seguridad: 30/06/2025</li>
-              </ul>
+
+            <div className="bg-gray-50 dark:bg-dark-700 p-4 rounded-lg">
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-gray-600 dark:text-gray-300">Eficiencia Balanceo</span>
+                <span className="font-medium text-primary-600 dark:text-primary-400">
+                  {eficienciaBalanceo.toFixed(0)}%
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 dark:bg-dark-600 rounded-full h-2">
+                <div 
+                  className="bg-primary-500 h-2 rounded-full" 
+                  style={{ width: `${eficienciaBalanceo}%` }}
+                ></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="card">
+            <h3 className="font-semibold text-gray-800 dark:text-white mb-3">Servidores</h3>
+            <div className="space-y-2">
+              {servers.slice(0, 5).map((server) => (
+                <div 
+                  key={server.id} 
+                  className="flex items-center justify-between p-2 bg-gray-50 dark:bg-dark-700 rounded"
+                >
+                  <span className="text-sm text-gray-700 dark:text-gray-300">{server.name}</span>
+                  <span className={`text-xs font-semibold px-2 py-1 rounded ${
+                    server.status === 'active' 
+                      ? 'bg-success-100 dark:bg-success-900 text-success-700 dark:text-success-200'
+                      : 'bg-danger-100 dark:bg-danger-900 text-danger-700 dark:text-danger-200'
+                  }`}>
+                    {server.status}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         </div>

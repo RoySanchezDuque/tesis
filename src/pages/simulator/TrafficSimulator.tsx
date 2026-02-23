@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useSimulation } from '../../contexts/SimulationContext';
+import { useServer } from '../../contexts/ServerContext';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer, Legend, BarChart, Bar 
 } from 'recharts';
-import { Sliders, Play, SkipForward, PauseCircle, Router, Activity, BarChart2, FileText } from 'lucide-react';
+import { Sliders, Play, SkipForward, PauseCircle, Router, Activity, BarChart2, FileText, Send } from 'lucide-react';
 import { obtenerFechaFormateada } from '../../utils/dateUtils';
 import LogsPanel from '../../components/LogsPanel';
 
@@ -29,7 +30,26 @@ const TrafficSimulator = () => {
     resetearSimulacion
   } = useSimulation();
   
+  const { sendTraffic, servers } = useServer();
+  
   const [showComparison, setShowComparison] = useState<boolean>(false);
+  
+  // Función para enviar tráfico al backend
+  const handleSendTraffic = async () => {
+    // Generar métricas aleatorias según el formato esperado por el backend
+    const trafficData = {
+      traffic_volume: parseFloat((Math.random() * 1000).toFixed(2)),
+      network_latency: parseFloat((Math.random() * 200).toFixed(2)),
+      throughput: parseFloat((Math.random() * 100).toFixed(2)),
+      packet_loss: parseFloat((Math.random() * 5).toFixed(2)),
+      signal_strength: parseFloat((Math.random() * 100).toFixed(2)),
+      resource_allocation: parseFloat((Math.random() * 100).toFixed(2)),
+      handover_success: parseFloat((Math.random() * 100).toFixed(2))
+    };
+    
+    console.log('Sending traffic data:', trafficData);
+    await sendTraffic(trafficData);
+  };
   
   // Datos para la comparación de algoritmos
   const comparisonData = [
@@ -90,6 +110,15 @@ const TrafficSimulator = () => {
           </h2>
           
           <div className="flex items-center space-x-2">
+            <button 
+              onClick={handleSendTraffic}
+              className="btn btn-success"
+              title="Enviar tráfico al backend"
+            >
+              <Send className="h-4 w-4 mr-2" />
+              Enviar Tráfico
+            </button>
+            
             <button 
               onClick={ejecutarBalanceo}
               className="btn btn-primary"

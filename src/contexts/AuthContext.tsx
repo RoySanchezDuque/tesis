@@ -45,6 +45,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) {
       setUser(JSON.parse(storedUser));
+    } else {
+      // Auto-login como invitado si no hay usuario
+      const guestUser: User = {
+        id: 999,
+        username: 'invitado',
+        nombre: 'Usuario',
+        apellido: 'Invitado',
+        email: 'invitado@example.com',
+        rol: 'invitado',
+        avatar: 'https://via.placeholder.com/150'
+      };
+      setUser(guestUser);
+      localStorage.setItem('user', JSON.stringify(guestUser));
     }
     setLoading(false);
   }, []);
